@@ -8,40 +8,36 @@
 
 <h2>Synced Audio Player</h2>
 
-<h3>1. Enable Audio</h3>
-<button id="unlockBtn">Tap to Enable Audio</button>
-
-<h3>2. Choose Audio</h3>
+<h3>1. Choose Audio</h3>
 <div id="trackList">Loading audio files...</div>
 
-<h3>3. Enter Start Time (24-hour)</h3>
+<h3>2. Enter Start Time (24-hour)</h3>
 <input type="time" id="startTime" step="1">
 
 <br><br>
 <button id="armBtn" disabled>ARM SYNC</button>
 
-<p id="status">Audio not enabled.</p>
+<p id="status">Loading...</p>
 
 <audio id="audio" preload="auto" playsinline></audio>
 
 <script>
 let startTime = null;
 let scheduledTimeout = null;
-let audioUnlocked = false;
 
 const audio = document.getElementById("audio");
 const status = document.getElementById("status");
-const unlockBtn = document.getElementById("unlockBtn");
 const armBtn = document.getElementById("armBtn");
 
-// --------------------------------------------
-// Load audio list from JSON
-// --------------------------------------------
+// -------------------------------
+// Load JSON audio list
+// -------------------------------
 fetch("audio_list.json")
   .then(response => response.json())
   .then(tracks => {
     const container = document.getElementById("trackList");
     container.innerHTML = "";
+
     tracks.forEach((track, index) => {
       const label = document.createElement("label");
       label.innerHTML =
@@ -52,71 +48,46 @@ fetch("audio_list.json")
       container.appendChild(label);
       container.appendChild(document.createElement("br"));
     });
+
+    status.innerHTML = "Select a track and enter start time.";
+    armBtn.disabled = false; // Enable ARM SYNC after JSON is loaded
   })
   .catch(err => {
     console.error(err);
-    document.getElementById("trackList").innerHTML =
-      "Unable to load audio list.";
+    container.innerHTML = "Unable to load audio list.";
   });
 
-// --------------------------------------------
-// Gesture-safe unlock
-// --------------------------------------------
-unlockBtn.addEventListener('click', () => {
-  // First play() must happen inside this click event
-  audio.play().then(() => {
-    audio.pause();          // pause immediately to pre-buffer
-    audio.currentTime = 0;
-    audioUnlocked = true;
-    unlockBtn.style.display = "none"; // hide button
-    armBtn.disabled = false;          // enable ARM SYNC
-    status.innerHTML = "Audio enabled. Ready.";
-  }).catch(err => {
-    console.log("Play failed:", err);
-    alert("Audio cannot be unlocked. Try tapping again.");
-  });
-});
-
-// --------------------------------------------
+// -------------------------------
 // ARM SYNC
-// --------------------------------------------
+// -------------------------------
 armBtn.addEventListener('click', () => {
-  if (!audioUnlocked) {
-    alert("Enable audio first.");
-    return;
-  }
-
   const chosen = document.querySelector('input[name="track"]:checked');
   if (!chosen) {
     alert("Choose a track.");
     return;
   }
 
-  audio.src = chosen.value;
-  audio.load();
-  audio.currentTime = 0;
-
-  // Optional: small pre-buffer decode delay
-  setTimeout(() => {
-    audio.play().then(() => audio.pause()).catch(()=>{});
-  }, 50);
-
-  // Parse start time
   const timeInput = document.getElementById("startTime").value;
   if (!timeInput) {
     alert("Enter a start time.");
     return;
   }
 
+  // Set audio src and preload
+  audio.src = chosen.value;
+  audio.load(); // ensure ready for immediate playback
+  audio.currentTime = 0;
+
+  // Parse start time
   const now = new Date();
   const today =
     now.getFullYear() + "-" +
     String(now.getMonth()+1).padStart(2,'0') + "-" +
     String(now.getDate()).padStart(2,'0');
-
   startTime = new Date(today + "T" + timeInput);
+
   if (isNaN(startTime)) {
-    alert("Invalid start time format.");
+    alert("Invalid start time format");
     return;
   }
 
@@ -129,12 +100,17 @@ armBtn.addEventListener('click', () => {
     return;
   }
 
+  // Schedule playback
   scheduledTimeout = setTimeout(() => {
-    audio.play();
-    status.innerHTML = "PLAYING";
+    audio.play().then(() => {
+      status.innerHTML = "PLAYING";
+    }).catch(err => {
+      console.log("Playback failed:", err);
+      status.innerHTML = "Playback failed (mobile gesture may be required)";
+    });
   }, delay);
 
-  status.innerHTML = "Armed. Starts in " + (delay / 1000).toFixed(1) + " seconds";
+  status.innerHTML = "Armed. Starts in " + (delay/1000).toFixed(1) + " seconds";
 });
 </script>
 
