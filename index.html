@@ -2,11 +2,11 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Synced Audio Player</title>
+  <title>Synced Audio Player (Web Audio API)</title>
 </head>
 <body style="font-family:sans-serif;text-align:center;margin-top:40px;">
 
-<h2>Synced Audio Player</h2>
+<h2>Synced Audio Player (Web Audio API)</h2>
 
 <h3>1. Enable Audio</h3>
 <button id="unlockBtn">Tap to Enable Audio</button>
@@ -22,23 +22,18 @@
 
 <p id="status">Audio not enabled.</p>
 
-<audio id="audio" preload="auto" playsinline></audio>
-
 <script>
-let startTime = null;
-let scheduledTimeout = null;
+let audioCtx;
+let audioBuffer = null;
 let audioUnlocked = false;
-
-const audio = document.getElementById("audio");
-const status = document.getElementById("status");
-const unlockBtn = document.getElementById("unlockBtn");
-const armBtn = document.getElementById("armBtn");
+let startTime = null;
+let scheduledSource = null;
 
 // -------------------------------
 // Load JSON audio list
 // -------------------------------
 fetch("audio_list.json")
-  .then(response => response.json())
+  .then(res => res.json())
   .then(tracks => {
     const container = document.getElementById("trackList");
     container.innerHTML = "";
@@ -53,62 +48,51 @@ fetch("audio_list.json")
       container.appendChild(label);
       container.appendChild(document.createElement("br"));
     });
-
-    status.innerHTML = "Tap 'Enable Audio' to start.";
+    document.getElementById("status").innerText = "Tap 'Enable Audio' to start.";
   })
   .catch(err => {
     console.error(err);
-    document.getElementById("trackList").innerHTML = "Unable to load audio list.";
+    document.getElementById("trackList").innerText = "Unable to load audio list.";
   });
 
 // -------------------------------
-// Enable Audio (gesture-safe for mobile)
-// -------------------------------
-unlockBtn.addEventListener('click', () => {
+// Enable Audio (gesture-safe)
+document.getElementById("unlockBtn").addEventListener("click", async () => {
   const chosen = document.querySelector('input[name="track"]:checked');
   if (!chosen) {
-    alert("Please select a track first.");
+    alert("Select a track first.");
     return;
   }
 
-  audio.src = chosen.value;
-  audio.load();
-  audio.currentTime = 0;
+  // Create AudioContext
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  await audioCtx.resume();
 
-  // Gesture-safe pre-buffer
-  audio.play().then(() => {
-    audio.pause();
-    audio.currentTime = 0;
-    audioUnlocked = true;
-    unlockBtn.style.display = "none"; // hide enable button
-    armBtn.disabled = false;          // allow ARM SYNC
-    status.innerHTML = "Audio enabled and pre-buffered. Ready to ARM SYNC.";
-  }).catch(err => {
-    console.log("Audio unlock failed:", err);
-    alert("Tap again to enable audio.");
-  });
+  // Load and decode audio
+  fetch(chosen.value)
+    .then(res => res.arrayBuffer())
+    .then(data => audioCtx.decodeAudioData(data))
+    .then(buffer => {
+      audioBuffer = buffer;
+      audioUnlocked = true;
+      document.getElementById("unlockBtn").style.display = "none";
+      document.getElementById("armBtn").disabled = false;
+      document.getElementById("status").innerText = "Audio enabled and ready to ARM SYNC.";
+    })
+    .catch(err => {
+      console.error("Audio decode failed:", err);
+      alert("Failed to load audio. Try again.");
+    });
 });
 
 // -------------------------------
 // ARM SYNC
-// -------------------------------
-armBtn.addEventListener('click', () => {
-  if (!audioUnlocked) {
+document.getElementById("armBtn").addEventListener("click", () => {
+  if (!audioUnlocked || !audioBuffer) {
     alert("Enable audio first.");
     return;
-  }
-
-  const chosen = document.querySelector('input[name="track"]:checked');
-  if (!chosen) {
-    alert("Choose a track.");
-    return;
-  }
-
-  // Ensure the selected track is loaded
-  if (audio.src !== chosen.value) {
-    audio.src = chosen.value;
-    audio.load();
-    audio.currentTime = 0;
   }
 
   const timeInput = document.getElementById("startTime").value;
@@ -123,32 +107,42 @@ armBtn.addEventListener('click', () => {
     now.getFullYear() + "-" +
     String(now.getMonth()+1).padStart(2,'0') + "-" +
     String(now.getDate()).padStart(2,'0');
-
   startTime = new Date(today + "T" + timeInput);
+
   if (isNaN(startTime)) {
     alert("Invalid start time format");
     return;
   }
 
-  const delay = startTime - Date.now();
-  if (scheduledTimeout) clearTimeout(scheduledTimeout);
+  const delaySec = (startTime - Date.now()) / 1000;
 
-  if (delay <= 0) {
-    status.innerHTML = "Start time already passed. Playing now.";
-    audio.play();
+  if (scheduledSource) {
+    scheduledSource.stop(); // Stop previous schedule if any
+    scheduledSource = null;
+  }
+
+  if (delaySec <= 0) {
+    // Start immediately
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioCtx.destination);
+    source.start();
+    document.getElementById("status").innerText = "PLAYING NOW";
     return;
   }
 
-  scheduledTimeout = setTimeout(() => {
-    audio.play().then(() => {
-      status.innerHTML = "PLAYING";
-    }).catch(err => {
-      console.log("Playback failed:", err);
-      status.innerHTML = "Playback failed (mobile gesture may be required)";
-    });
-  }, delay);
+  // Schedule playback using AudioContext
+  const source = audioCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioCtx.destination);
 
-  status.innerHTML = "Armed. Starts in " + (delay/1000).toFixed(1) + " seconds";
+  // schedule at precise AudioContext time
+  const scheduledTime = audioCtx.currentTime + delaySec;
+  source.start(scheduledTime);
+  scheduledSource = source;
+
+  document.getElementById("status").innerText =
+    `Armed. Starts in ${delaySec.toFixed(2)} seconds`;
 });
 </script>
 
