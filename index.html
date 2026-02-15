@@ -85,17 +85,21 @@ function armSync() {
     return;
   }
 
-  // Preload and decode immediately
+  // Set audio src and preload
   audio.src = chosen.value;
   audio.load();
   audio.currentTime = 0;
-  audio.play().then(() => {
-    audio.pause();
-    audio.currentTime = 0;
-    status.innerHTML = "Audio buffered. Waiting for sync...";
-  });
 
-  // Parse time input
+  // Pre-buffer with small delay to allow decoding
+  setTimeout(() => {
+    audio.play().then(() => {
+      audio.pause();
+      audio.currentTime = 0;
+      status.innerHTML = "Audio buffered. Waiting for sync...";
+    }).catch(()=>{});
+  }, 50);
+
+  // Parse start time
   const timeInput = document.getElementById("startTime").value;
   if (!timeInput) {
     alert("Enter a start time");
@@ -110,15 +114,20 @@ function armSync() {
 
   startTime = new Date(today + "T" + timeInput);
 
+  if (isNaN(startTime)) {
+    alert("Invalid start time format");
+    return;
+  }
+
   const delay = startTime - Date.now();
+
+  if (scheduledTimeout) clearTimeout(scheduledTimeout);
+
   if (delay <= 0) {
     status.innerHTML = "Start time already passed. Playing now.";
     audio.play();
     return;
   }
-
-  // Clear previous timeout if any
-  if (scheduledTimeout) clearTimeout(scheduledTimeout);
 
   scheduledTimeout = setTimeout(() => {
     audio.play();
