@@ -2,11 +2,11 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Synced Audio Player (Web Audio API)</title>
+  <title>Multi-Device Synced Audio Player</title>
 </head>
 <body style="font-family:sans-serif;text-align:center;margin-top:40px;">
 
-<h2>Synced Audio Player (Web Audio API)</h2>
+<h2>Multi-Device Synced Audio Player</h2>
 
 <h3>1. Enable Audio</h3>
 <button id="unlockBtn">Tap to Enable Audio</button>
@@ -14,8 +14,8 @@
 <h3>2. Choose Audio</h3>
 <div id="trackList">Loading audio files...</div>
 
-<h3>3. Enter Start Time (24-hour)</h3>
-<input type="time" id="startTime" step="1">
+<h3>3. Schedule Start Time</h3>
+<p>Start time is provided by server for multi-device sync.</p>
 
 <br><br>
 <button id="armBtn" disabled>ARM SYNC</button>
@@ -26,7 +26,6 @@
 let audioCtx;
 let audioBuffer = null;
 let audioUnlocked = false;
-let startTime = null;
 let scheduledSource = null;
 
 // -------------------------------
@@ -48,6 +47,7 @@ fetch("audio_list.json")
       container.appendChild(label);
       container.appendChild(document.createElement("br"));
     });
+
     document.getElementById("status").innerText = "Tap 'Enable Audio' to start.";
   })
   .catch(err => {
@@ -79,7 +79,7 @@ document.getElementById("unlockBtn").addEventListener("click", async () => {
       audioUnlocked = true;
       document.getElementById("unlockBtn").style.display = "none";
       document.getElementById("armBtn").disabled = false;
-      document.getElementById("status").innerText = "Audio enabled and ready to ARM SYNC.";
+      document.getElementById("status").innerText = "Audio enabled. Ready to ARM SYNC.";
     })
     .catch(err => {
       console.error("Audio decode failed:", err);
@@ -88,61 +88,54 @@ document.getElementById("unlockBtn").addEventListener("click", async () => {
 });
 
 // -------------------------------
-// ARM SYNC
-document.getElementById("armBtn").addEventListener("click", () => {
+// ARM SYNC with server timestamp
+document.getElementById("armBtn").addEventListener("click", async () => {
   if (!audioUnlocked || !audioBuffer) {
     alert("Enable audio first.");
     return;
   }
 
-  const timeInput = document.getElementById("startTime").value;
-  if (!timeInput) {
-    alert("Enter a start time.");
-    return;
-  }
+  try {
+    // Fetch start timestamp from server (milliseconds since epoch)
+    const response = await fetch("/start_time.json");
+    const data = await response.json();
+    const serverStartMs = data.startTime; // e.g., 1700000000000
 
-  // Parse start time
-  const now = new Date();
-  const today =
-    now.getFullYear() + "-" +
-    String(now.getMonth()+1).padStart(2,'0') + "-" +
-    String(now.getDate()).padStart(2,'0');
-  startTime = new Date(today + "T" + timeInput);
+    const nowMs = Date.now();
+    const delaySec = (serverStartMs - nowMs) / 1000;
 
-  if (isNaN(startTime)) {
-    alert("Invalid start time format");
-    return;
-  }
+    if (scheduledSource) {
+      scheduledSource.stop();
+      scheduledSource = null;
+    }
 
-  const delaySec = (startTime - Date.now()) / 1000;
+    if (delaySec <= 0) {
+      // Start immediately if past time
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioCtx.destination);
+      source.start();
+      document.getElementById("status").innerText = "PLAYING NOW";
+      return;
+    }
 
-  if (scheduledSource) {
-    scheduledSource.stop(); // Stop previous schedule if any
-    scheduledSource = null;
-  }
-
-  if (delaySec <= 0) {
-    // Start immediately
+    // Schedule playback using AudioContext
     const source = audioCtx.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(audioCtx.destination);
-    source.start();
-    document.getElementById("status").innerText = "PLAYING NOW";
-    return;
+
+    // Scheduled AudioContext time
+    const scheduledTime = audioCtx.currentTime + delaySec;
+    source.start(scheduledTime);
+    scheduledSource = source;
+
+    document.getElementById("status").innerText =
+      `Armed. Starts in ${delaySec.toFixed(2)} seconds (server time)`;
+
+  } catch (err) {
+    console.error("Failed to fetch server start time:", err);
+    alert("Could not get server start time.");
   }
-
-  // Schedule playback using AudioContext
-  const source = audioCtx.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(audioCtx.destination);
-
-  // schedule at precise AudioContext time
-  const scheduledTime = audioCtx.currentTime + delaySec;
-  source.start(scheduledTime);
-  scheduledSource = source;
-
-  document.getElementById("status").innerText =
-    `Armed. Starts in ${delaySec.toFixed(2)} seconds`;
 });
 </script>
 
