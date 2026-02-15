@@ -35,6 +35,66 @@ const status = document.getElementById("status");
 // LOAD AUDIO LIST (dynamic radio buttons)
 // --------------------------------------------------
 
+  <script>
+
+let startTime = null;
+let started = false;
+let audioUnlocked = false;
+
+const audio = document.getElementById("audio");
+const status = document.getElementById("status");
+
+
+// --------------------------------------------
+// AUTO-DETECT AUDIO FILES FROM /audio FOLDER
+// --------------------------------------------
+fetch("audio/")
+  .then(response => response.text())
+  .then(html => {
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    const links = [...doc.querySelectorAll("a")];
+
+    const container = document.getElementById("trackList");
+    container.innerHTML = "";
+
+    let first = true;
+
+    links.forEach(link => {
+
+      const href = link.getAttribute("href");
+
+      if (href && href.match(/\.(mp3|wav|m4a|ogg)$/i)) {
+
+        const label = document.createElement("label");
+
+        label.innerHTML =
+          `<input type="radio" name="track"
+            value="audio/${href}"
+            ${first ? "checked" : ""}>
+            ${href}`;
+
+        container.appendChild(label);
+        container.appendChild(document.createElement("br"));
+
+        first = false;
+      }
+    });
+
+    if (first) {
+      container.innerHTML = "No audio files found.";
+    }
+
+  })
+  .catch(() => {
+    document.getElementById("trackList").innerHTML =
+      "Could not read audio folder.";
+  });
+
+</script>
+
 
 // --------------------------------------------------
 // iOS AUDIO UNLOCK (first user tap)
