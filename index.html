@@ -54,7 +54,7 @@ fetch("audio_list.json")
   })
   .catch(err => {
     console.error(err);
-    container.innerHTML = "Unable to load audio list.";
+    document.getElementById("trackList").innerHTML = "Unable to load audio list.";
   });
 
 // -------------------------------
@@ -75,8 +75,22 @@ armBtn.addEventListener('click', () => {
 
   // Set audio src and preload
   audio.src = chosen.value;
-  audio.load(); // ensure ready for immediate playback
+  audio.load(); // ensure ready for playback
   audio.currentTime = 0;
+
+  // -------------------------------
+  // Minimal pre-buffering enhancement
+  // -------------------------------
+  // Try to decode the audio in advance
+  audio.play().then(() => {
+    audio.pause();
+    audio.currentTime = 0;
+    status.innerHTML = "Audio pre-buffered. Waiting for sync...";
+  }).catch(err => {
+    console.log("Pre-buffer failed:", err);
+    // If mobile blocks it, continue anyway
+    status.innerHTML = "Waiting for sync...";
+  });
 
   // Parse start time
   const now = new Date();
