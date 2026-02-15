@@ -97,7 +97,7 @@ document.getElementById("armBtn").addEventListener("click", async () => {
 
   try {
     // Fetch start timestamp from server (milliseconds since epoch)
-    const response = await fetch("/start_time.json");
+    const response = await fetch("start_time.json");
     const data = await response.json();
     const serverStartMs = data.startTime; // e.g., 1700000000000
 
