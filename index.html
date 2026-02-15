@@ -1,115 +1,75 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Synced Audio Player</title>
-</head>
 <body style="font-family:sans-serif;text-align:center;margin-top:40px;">
 
 <h2>Synced Audio Player</h2>
 
 <h3>1. Choose Audio</h3>
-<div id="trackList">Loading audio files...</div>
+<div id="trackList">Loading tracks...</div>
 
-<h3>2. Enter Start Time (24-hour)</h3>
+<h3>2. Enter Start Time</h3>
 <input type="time" id="startTime" step="1">
 
 <br><br>
 <button onclick="armSync()">ARM SYNC</button>
 
-<p id="status">Tap anywhere once to enable audio</p>
+<p id="status">Not armed</p>
 
-<audio id="audio" preload="auto" playsinline></audio>
+<audio id="audio" preload="auto"></audio>
 
 <script>
-let startTime = null;
+
+let startTime;
 let started = false;
-let audioUnlocked = false;
+let selectedTrack = null;
+
 const audio = document.getElementById("audio");
 const status = document.getElementById("status");
 
-// --------------------------------------------
-// iOS / mobile audio unlock
-// --------------------------------------------
-document.body.addEventListener('click', () => {
-  if (audioUnlocked) return;
-  audio.play()
-    .then(() => {
-      audio.pause();
-      audio.currentTime = 0;
-      audioUnlocked = true;
-      status.innerHTML = "Audio enabled. Ready.";
-    })
-    .catch(()=>{});
-}, { once: true });
 
-// --------------------------------------------
-// DYNAMIC AUDIO LOADING FROM /audio FOLDER
-// --------------------------------------------
-fetch("audio/")
-  .then(response => response.text())
-  .then(html => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const links = doc.querySelectorAll("a");
+// ⭐ LOAD AUDIO LIST DYNAMICALLY
+fetch("audio_list.json")
+  .then(response => response.json())
+  .then(tracks => {
+
     const container = document.getElementById("trackList");
     container.innerHTML = "";
 
-    let first = true;
+    tracks.forEach((track, index) => {
 
-    links.forEach(link => {
-      let href = link.getAttribute("href");
-      if (!href) return;
-      if (href.startsWith("../")) return; // skip parent directory
-
-      // Extract filename only
-      const filename = href.split("/").pop();
-
-      // Accept common audio file extensions
-      if (!filename.match(/\.(mp3|wav|m4a|ogg)$/i)) return;
-
-      // Create radio button
       const label = document.createElement("label");
+
       label.innerHTML =
         `<input type="radio" name="track"
-           value="audio/${filename}"
-           ${first ? "checked" : ""}>
-         ${filename}`;
+          value="${track.file}"
+          ${index===0 ? "checked" : ""}>
+          ${track.name}`;
 
       container.appendChild(label);
       container.appendChild(document.createElement("br"));
-
-      first = false;
     });
 
-    if (first) container.innerHTML = "No audio files detected.";
-  })
-  .catch(err => {
-    console.error(err);
-    document.getElementById("trackList").innerHTML =
-      "Unable to read audio folder. Directory listing may be disabled.";
   });
 
-// --------------------------------------------
-// ARM SYNC FUNCTION
-// --------------------------------------------
-function armSync() {
-  if (!audioUnlocked) {
-    alert("Tap anywhere first to enable audio.");
-    return;
-  }
 
-  const chosen = document.querySelector('input[name="track"]:checked');
+function armSync() {
+
+  const chosen =
+    document.querySelector('input[name="track"]:checked');
+
   if (!chosen) {
     alert("Choose a track");
     return;
   }
 
-  audio.src = chosen.value;
-  audio.load();
-  audio.currentTime = 0;
+  selectedTrack = chosen.value;
 
-  const timeInput = document.getElementById("startTime").value;
+  audio.src = selectedTrack;
+  audio.load();
+
+  const timeInput =
+    document.getElementById("startTime").value;
+
   if (!timeInput) {
     alert("Enter a start time");
     return;
@@ -122,15 +82,15 @@ function armSync() {
     String(now.getDate()).padStart(2,'0');
 
   startTime = new Date(today + "T" + timeInput);
-  started = false;
 
-  status.innerHTML = "Armed. Waiting for sync time...";
+  started = false;
+  status.innerHTML = "Armed. Waiting...";
 }
 
-// --------------------------------------------
-// CLOCK WATCHER (sync trigger)
-// --------------------------------------------
+
+// ⭐ CLOCK WATCHER
 setInterval(() => {
+
   if (!startTime || started) return;
 
   const now = new Date();
@@ -141,9 +101,12 @@ setInterval(() => {
     status.innerHTML = "PLAYING";
     started = true;
   } else {
-    status.innerHTML = "Starts in " + diff.toFixed(1) + " seconds";
+    status.innerHTML =
+      "Starts in " + diff.toFixed(1) + " seconds";
   }
-}, 25);
+
+}, 50);
+
 </script>
 
 </body>
