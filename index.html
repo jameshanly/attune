@@ -27,7 +27,8 @@ const audio = document.getElementById("audio");
 const status = document.getElementById("status");
 
 
-// ⭐ LOAD AUDIO LIST DYNAMICALLY
+// LOAD AUDIO LIST DYNAMICALLY
+  
 fetch("audio_list.json")
   .then(response => response.json())
   .then(tracks => {
