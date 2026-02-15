@@ -35,20 +35,19 @@ const unlockBtn = document.getElementById("unlockBtn");
 const armBtn = document.getElementById("armBtn");
 
 // --------------------------------------------
-// JSON audio list loading
+// Load audio list from JSON
 // --------------------------------------------
 fetch("audio_list.json")
   .then(response => response.json())
   .then(tracks => {
     const container = document.getElementById("trackList");
     container.innerHTML = "";
-
     tracks.forEach((track, index) => {
       const label = document.createElement("label");
       label.innerHTML =
         `<input type="radio" name="track"
            value="${track.file}"
-           ${index === 0 ? "checked" : ""}>
+           ${index===0 ? "checked" : ""}>
          ${track.name}`;
       container.appendChild(label);
       container.appendChild(document.createElement("br"));
@@ -61,27 +60,27 @@ fetch("audio_list.json")
   });
 
 // --------------------------------------------
-// Unlock audio on mobile / iOS
+// Gesture-safe unlock
 // --------------------------------------------
 unlockBtn.addEventListener('click', () => {
+  // First play() must happen inside this click event
   audio.play().then(() => {
-    audio.pause();
+    audio.pause();          // pause immediately to pre-buffer
     audio.currentTime = 0;
     audioUnlocked = true;
+    unlockBtn.style.display = "none"; // hide button
+    armBtn.disabled = false;          // enable ARM SYNC
     status.innerHTML = "Audio enabled. Ready.";
-    unlockBtn.style.display = "none";
-    armBtn.disabled = false;
-  }).catch(() => {
-    alert("Audio unlock failed. Tap again.");
+  }).catch(err => {
+    console.log("Play failed:", err);
+    alert("Audio cannot be unlocked. Try tapping again.");
   });
 });
 
 // --------------------------------------------
 // ARM SYNC
 // --------------------------------------------
-document.getElementById("armBtn").addEventListener("click", armSync);
-
-function armSync() {
+armBtn.addEventListener('click', () => {
   if (!audioUnlocked) {
     alert("Enable audio first.");
     return;
@@ -93,18 +92,13 @@ function armSync() {
     return;
   }
 
-  // Set audio src and preload
   audio.src = chosen.value;
   audio.load();
   audio.currentTime = 0;
 
-  // Pre-buffer with short timeout to allow decoding
+  // Optional: small pre-buffer decode delay
   setTimeout(() => {
-    audio.play().then(() => {
-      audio.pause();
-      audio.currentTime = 0;
-      status.innerHTML = "Audio buffered. Waiting for sync...";
-    }).catch(()=>{});
+    audio.play().then(() => audio.pause()).catch(()=>{});
   }, 50);
 
   // Parse start time
@@ -127,7 +121,6 @@ function armSync() {
   }
 
   const delay = startTime - Date.now();
-
   if (scheduledTimeout) clearTimeout(scheduledTimeout);
 
   if (delay <= 0) {
@@ -142,7 +135,7 @@ function armSync() {
   }, delay);
 
   status.innerHTML = "Armed. Starts in " + (delay / 1000).toFixed(1) + " seconds";
-}
+});
 </script>
 
 </body>
