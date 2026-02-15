@@ -45,43 +45,29 @@ document.body.addEventListener('click', () => {
 }, { once: true });
 
 // --------------------------------------------
-// DYNAMIC AUDIO LOADING FROM /audio FOLDER
+// LOAD AUDIO LIST FROM JSON
 // --------------------------------------------
-fetch("audio/")
-  .then(response => response.text())
-  .then(html => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const links = doc.querySelectorAll("a");
+fetch("audio_list.json")
+  .then(response => response.json())
+  .then(tracks => {
     const container = document.getElementById("trackList");
     container.innerHTML = "";
 
-    let first = true;
-    links.forEach(link => {
-      let href = link.getAttribute("href");
-      if (!href) return;
-      if (href.startsWith("../")) return;
-
-      const filename = href.split("/").pop();
-      if (!filename.match(/\.(mp3|wav|m4a|ogg)$/i)) return;
-
+    tracks.forEach((track, index) => {
       const label = document.createElement("label");
       label.innerHTML =
         `<input type="radio" name="track"
-           value="audio/${filename}"
-           ${first ? "checked" : ""}>
-         ${filename}`;
+           value="${track.file}"
+           ${index===0 ? "checked" : ""}>
+         ${track.name}`;
       container.appendChild(label);
       container.appendChild(document.createElement("br"));
-      first = false;
     });
-
-    if (first) container.innerHTML = "No audio files detected.";
   })
   .catch(err => {
     console.error(err);
     document.getElementById("trackList").innerHTML =
-      "Unable to read audio folder. Directory listing may be disabled.";
+      "Unable to load audio list.";
   });
 
 // --------------------------------------------
