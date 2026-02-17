@@ -89,33 +89,49 @@ document.getElementById("unlockBtn").addEventListener("click", async () => {
 
 // -------------------------------
 // ARM SYNC with static future timestamp
-document.getElementById("armBtn").addEventListener("click", () => {
-  if (!audioUnlocked || !audioBuffer) {
+
+
+document.getElementById("armBtn").addEventListener("click", async () => {
+
+  if (!audioBuffer || !audioCtx) {
     alert("Enable audio first.");
     return;
   }
 
-  // Schedule playback 5 seconds from now for testing
-  const delaySec = 10; // you can adjust this
-  const nowMs = Date.now();
-  const serverStartMs = nowMs + delaySec * 1000; // simulate "server timestamp" in future
-
-  if (scheduledSource) {
-    scheduledSource.stop();
-    scheduledSource = null;
-  }
-
-  const source = audioCtx.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(audioCtx.destination);
-
-  const scheduledTime = audioCtx.currentTime + (serverStartMs - Date.now()) / 1000;
-  source.start(scheduledTime);
-  scheduledSource = source;
-
   document.getElementById("status").innerText =
-    `Armed. Playback scheduled in ${delaySec.toFixed(1)} seconds.`;
+    "Contacting sync server...";
+
+  try {
+
+    const response = await fetch("/api/start-time");
+    const data = await response.json();
+
+    const serverStartMs = data.startTime;
+
+    const delaySec =
+      (serverStartMs - Date.now()) / 1000;
+
+    if (delaySec <= 0) {
+      alert("Start time already passed.");
+      return;
+    }
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioCtx.destination);
+
+    source.start(audioCtx.currentTime + delaySec);
+
+    document.getElementById("status").innerText =
+      `Synced! Playing in ${delaySec.toFixed(2)} seconds`;
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById("status").innerText =
+      "Could not get server start time.";
+  }
 });
+
 </script>
 
 </body>
