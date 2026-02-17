@@ -1,11 +1,15 @@
 export async function GET() {
 
-  const LEAD_TIME_MS = 10000; // 10 seconds
+  const LEAD_TIME_MS = 10000;
 
-  const startTime = Date.now() + LEAD_TIME_MS;
+  const now = Date.now();
+  const startTime = now + LEAD_TIME_MS;
 
   return new Response(
-    JSON.stringify({ startTime }),
+    JSON.stringify({
+      startTime: startTime,
+      serverNow: now
+    }),
     {
       headers: { "Content-Type": "application/json" }
     }
