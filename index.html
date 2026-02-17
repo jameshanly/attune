@@ -90,48 +90,53 @@ document.getElementById("unlockBtn").addEventListener("click", async () => {
 // -------------------------------
 // ARM SYNC with static future timestamp
 
-
 document.getElementById("armBtn").addEventListener("click", async () => {
 
-  if (!audioBuffer || !audioCtx) {
+  if (!audioBuffer) {
     alert("Enable audio first.");
     return;
   }
 
   document.getElementById("status").innerText =
-    "Contacting sync server...";
+    "Syncing clocks...";
 
-  try {
+  const t0 = Date.now();
 
-    const response = await fetch("/api/start-time");
-    const data = await response.json();
+  const response = await fetch("/api/start-time");
+  const data = await response.json();
 
-    const serverStartMs = data.startTime;
+  const t1 = Date.now();
 
-    const delaySec =
-      (serverStartMs - Date.now()) / 1000;
+  // estimate network latency
+  const roundTrip = t1 - t0;
+  const latency = roundTrip / 2;
 
-    if (delaySec <= 0) {
-      alert("Start time already passed.");
-      return;
-    }
+  // estimate clock offset
+  const clockOffset =
+    (data.serverNow + latency) - t1;
 
-    const source = audioCtx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioCtx.destination);
+  // corrected current time
+  const correctedNow = Date.now() + clockOffset;
 
-    source.start(audioCtx.currentTime + delaySec);
+  const delaySec =
+    (data.startTime - correctedNow) / 1000;
 
-    document.getElementById("status").innerText =
-      `Synced! Playing in ${delaySec.toFixed(2)} seconds`;
-
-  } catch (err) {
-    console.error(err);
-    document.getElementById("status").innerText =
-      "Could not get server start time.";
+  if (delaySec <= 0) {
+    alert("Start time already passed");
+    return;
   }
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioCtx.destination);
+
+  source.start(audioCtx.currentTime + delaySec);
+
+  document.getElementById("status").innerText =
+    `Synced. Playing in ${delaySec.toFixed(2)}s`;
 });
 
+    
 </script>
 
 </body>
