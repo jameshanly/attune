@@ -1,142 +1,193 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Static Multi-Device Synced Audio Player</title>
+<meta charset="UTF-8">
+<title>Clock Locked Sync Player</title>
+
+<style>
+body {
+  font-family: sans-serif;
+  text-align: center;
+  margin-top: 40px;
+}
+
+button {
+  font-size: 18px;
+  padding: 12px 20px;
+  margin: 10px;
+}
+
+#status {
+  margin-top: 20px;
+  font-weight: bold;
+}
+</style>
 </head>
-<body style="font-family:sans-serif;text-align:center;margin-top:40px;">
 
-<h2>Static Multi-Device Synced Audio Player</h2>
+<body>
 
-<h3>1. Enable Audio</h3>
-<button id="unlockBtn">Tap to Enable Audio</button>
+<h2>Clock-Locked Sync Player</h2>
 
-<h3>2. Choose Audio</h3>
-<div id="trackList">Loading audio files...</div>
+<div id="audioList">Loading audio files…</div>
 
-<h3>3. Schedule Start Time</h3>
-<p>ARM SYNC will schedule playback a few seconds from now for testing multi-device sync.</p>
+<button onclick="enableAudio()">Enable Audio</button>
+<button onclick="armSync()">ARM SYNC</button>
 
-<br><br>
-<button id="armBtn" disabled>ARM SYNC</button>
-
-<p id="status">Audio not enabled.</p>
+<div id="status">Idle</div>
 
 <script>
-let audioCtx;
+let audioContext;
 let audioBuffer = null;
-let audioUnlocked = false;
-let scheduledSource = null;
+let selectedAudioFile = null;
+let clockOffset = 0;
 
-// -------------------------------
-// Load JSON audio list
-// -------------------------------
-fetch("audio_list.json")
-  .then(res => res.json())
-  .then(tracks => {
-    const container = document.getElementById("trackList");
-    container.innerHTML = "";
+/* ===============================
+   LOAD AUDIO LIST FROM JSON
+================================ */
 
-    tracks.forEach((track, index) => {
-      const label = document.createElement("label");
-      label.innerHTML =
-        `<input type="radio" name="track"
-           value="${track.file}"
-           ${index===0 ? "checked" : ""}>
-         ${track.name}`;
-      container.appendChild(label);
-      container.appendChild(document.createElement("br"));
-    });
+async function loadAudioList() {
 
-    document.getElementById("status").innerText = "Tap 'Enable Audio' to start.";
-  })
-  .catch(err => {
-    console.error(err);
-    document.getElementById("trackList").innerText = "Unable to load audio list.";
+  const response = await fetch("audio-files.json");
+  const files = await response.json();
+
+  const container = document.getElementById("audioList");
+  container.innerHTML = "";
+
+  files.forEach((file, index) => {
+
+    const label = document.createElement("label");
+    label.style.display = "block";
+
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "audio";
+    radio.value = "audio/" + file;
+
+    if (index === 0) {
+      radio.checked = true;
+      selectedAudioFile = radio.value;
+    }
+
+    radio.onchange = () => {
+      selectedAudioFile = radio.value;
+    };
+
+    label.appendChild(radio);
+    label.appendChild(document.createTextNode(" " + file));
+
+    container.appendChild(label);
   });
+}
 
-// -------------------------------
-// Enable Audio (gesture-safe)
-document.getElementById("unlockBtn").addEventListener("click", async () => {
-  const chosen = document.querySelector('input[name="track"]:checked');
-  if (!chosen) {
-    alert("Select a track first.");
+loadAudioList();
+
+/* ===============================
+   ENABLE AUDIO (REQUIRED FOR iOS)
+================================ */
+
+async function enableAudio() {
+
+  document.getElementById("status").innerText =
+    "Enabling audio...";
+
+  audioContext =
+    new (window.AudioContext || window.webkitAudioContext)();
+
+  // resume required on iOS
+  await audioContext.resume();
+
+  if (!selectedAudioFile) {
+    alert("Select an audio file first");
     return;
   }
 
-  // Create AudioContext
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  await audioCtx.resume();
+  const response = await fetch(selectedAudioFile);
+  const arrayBuffer = await response.arrayBuffer();
 
-  // Load and decode audio
-  fetch(chosen.value)
-    .then(res => res.arrayBuffer())
-    .then(data => audioCtx.decodeAudioData(data))
-    .then(buffer => {
-      audioBuffer = buffer;
-      audioUnlocked = true;
-      document.getElementById("unlockBtn").style.display = "none";
-      document.getElementById("armBtn").disabled = false;
-      document.getElementById("status").innerText = "Audio enabled. Ready to ARM SYNC.";
-    })
-    .catch(err => {
-      console.error("Audio decode failed:", err);
-      alert("Failed to load audio. Try again.");
-    });
-});
+  audioBuffer =
+    await audioContext.decodeAudioData(arrayBuffer);
 
-// -------------------------------
-// ARM SYNC with static future timestamp
+  document.getElementById("status").innerText =
+    "Audio Ready ✅";
+}
 
-document.getElementById("armBtn").addEventListener("click", async () => {
+/* ===============================
+   ARM SYNC (CLOCK LOCKED)
+================================ */
 
-  if (!audioBuffer) {
-    alert("Enable audio first.");
+async function armSync() {
+
+  if (!audioContext || !audioBuffer) {
+    alert("Enable audio first");
     return;
   }
 
   document.getElementById("status").innerText =
-    "Syncing clocks...";
+    "Arming sync...";
 
-  const t0 = Date.now();
+  try {
 
-  const response = await fetch("/api/start-time");
-  const data = await response.json();
+    const t0 = Date.now();
 
-  const t1 = Date.now();
+    const response = await fetch("/api/start-time");
+    const data = await response.json();
 
-  // estimate network latency
-  const roundTrip = t1 - t0;
-  const latency = roundTrip / 2;
+    const t1 = Date.now();
 
-  // estimate clock offset
-  const clockOffset =
-    (data.serverNow + latency) - t1;
+    const roundTrip = t1 - t0;
 
-  // corrected current time
-  const correctedNow = Date.now() + clockOffset;
+    // latency compensated server time
+    const estimatedServerNow =
+      data.serverNow + (roundTrip / 2);
 
-  const delaySec =
-    (data.startTime - correctedNow) / 1000;
+    // calculate clock offset
+    clockOffset = estimatedServerNow - t1;
 
-  if (delaySec <= 0) {
-    alert("Start time already passed");
+    schedulePlayback(data.startTime);
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById("status").innerText =
+      "Could not get server start time ❌";
+  }
+}
+
+/* ===============================
+   PRECISE SCHEDULING
+================================ */
+
+function schedulePlayback(sharedStartTime) {
+
+  const correctedNow =
+    Date.now() + clockOffset;
+
+  const msUntilStart =
+    sharedStartTime - correctedNow;
+
+  if (msUntilStart <= 0) {
+    document.getElementById("status").innerText =
+      "Missed start window";
     return;
   }
 
-  const source = audioCtx.createBufferSource();
+  const when =
+    audioContext.currentTime + (msUntilStart / 1000);
+
+  const source =
+    audioContext.createBufferSource();
+
   source.buffer = audioBuffer;
-  source.connect(audioCtx.destination);
+  source.connect(audioContext.destination);
 
-  source.start(audioCtx.currentTime + delaySec);
+  source.start(when);
 
   document.getElementById("status").innerText =
-    `Synced. Playing in ${delaySec.toFixed(2)}s`;
-});
+    "Scheduled. Starts in " +
+    Math.round(msUntilStart / 1000) +
+    " seconds";
 
-    
+  console.log("Playback scheduled in", msUntilStart, "ms");
+}
 </script>
 
 </body>
