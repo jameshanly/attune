@@ -2,8 +2,7 @@ export async function GET() {
 
   const now = Date.now();
 
-  // next minute boundary + safety buffer
-  const interval = 60000;
+  const interval = 60000; // 1 minute
 
   const startTime =
     Math.ceil(now / interval) * interval + 10000;
