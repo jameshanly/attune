@@ -1,3 +1,4 @@
 [
-  { "name": "Lovely Day 272", "file": "audio/LD272.mp3" }
+  { "name": "Lovely Day 272", "file": "audio/LD272.mp3"; 
+    "name": "High Wire Walker", "file": "audio/highwire.mp3" }
 ]
